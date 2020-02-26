@@ -89,9 +89,7 @@ local_jupyter:
     extends: .binder
     script:
         - make docker_image
-        - cd .binder
-        - docker-compose run jupyter ${CMD}
-
+        - make DOCKER_CMD="${CMD}" docker_exec 
 .wheel:
     extends: .docker-in-docker
     stage: build
