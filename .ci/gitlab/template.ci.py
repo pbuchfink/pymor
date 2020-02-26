@@ -44,112 +44,6 @@ stages:
         reports:
             junit: test_results.xml
 
-numpy-git 3 6:
-    extends: .pytest
-    services:
-        - name: pymor/pypi-mirror_stable_py3.6:{{pypi_mirror_tag}}
-          alias: pypi_mirror
-    image: pymor/testing_py3.6:{{ci_image_tag}}
-    variables:
-        PYMOR_PYTEST_MARKER: "numpy"
-
-oldest 3.6:
-    extends: .pytest
-    services:
-        - name: pymor/pypi-mirror_stable_py3.6:{{pypi_mirror_tag}}
-          alias: pypi_mirror
-    image: pymor/testing_py3.6:{{ci_image_tag}}
-    variables:
-        PYMOR_PYTEST_MARKER: "OLDEST"
-
-minimal_cpp_demo:
-    extends: .pytest
-    services:
-        - name: pymor/pypi-mirror_stable_py3.6:{{pypi_mirror_tag}}
-          alias: pypi_mirror
-    image: pymor/testing_py3.7:{{ci_image_tag}}
-    script: ./.ci/gitlab/cpp_demo.bash
-
-pages:
-# this needs to use a semaphore to avoid races on the docker images
-# should become available with gitlab 12.6 (Dez. 17)
-    extends: .docker-in-docker
-    stage: deploy
-    variables:
-        IMAGE: ${CI_REGISTRY_IMAGE}/docs:latest
-    script:
-        - apk --update add make python3
-        - pip3 install jinja2 pathlib
-        - .ci/gitlab/deploy_docs.bash
-
-    # only:
-    #   - master
-    #   - tags
-    artifacts:
-        paths:
-            - public
-
-{%- for py, m in matrix %}
-{{m}} {{py[0]}} {{py[2]}}:
-    extends: .pytest
-    services:
-        - name: pymor/pypi-mirror_stable_py3.6:{{pypi_mirror_tag}}
-          alias: pypi_mirror
-    image: pymor/testing_py{{py}}:{{ci_image_tag}}
-    variables:
-        PYMOR_PYTEST_MARKER: "{{m}}"
-{%- endfor %}
-
-{# note: only Vanilla and numpy runs generate coverage or test_results so we can skip others entirely here #}
-.submit:
-    extends: .test_base
-    retry:
-        max: 2
-        when:
-            - always
-    environment:
-        name: safe
-    except:
-        - /^github\/PR_.*$/
-        - /^staging/.*$/i
-    stage: deploy
-    script: .ci/gitlab/submit.bash
-
-{%- for py, m in matrix if m == 'Vanilla' %}
-submit {{m}} {{py[0]}} {{py[2]}}:
-    extends: .submit
-    image: pymor/python:{{py}}
-    dependencies:
-        - {{m}} {{py[0]}} {{py[2]}}
-    variables:
-        PYMOR_PYTEST_MARKER: "{{m}}"
-{%- endfor %}
-
-submit numpy-git 3 6:
-    extends: .submit
-    image: pymor/python:3.6
-    dependencies:
-        - numpy-git 3 6
-    variables:
-        PYMOR_PYTEST_MARKER: "numpy"
-
-submit oldest 3.6:
-    extends: .submit
-    image: pymor/python:3.6
-    dependencies:
-        - oldest 3.6
-    variables:
-        PYMOR_PYTEST_MARKER: "OLDEST"
-
-# this step makes sure that on older python our install fails with
-# a nice message ala "python too old" instead of "SyntaxError"
-verify setup.py:
-    extends: .test_base
-    image: python:3.5-alpine
-    stage: install_checks
-    script:
-        - python setup.py egg_info
-
 .docker-in-docker:
     tags:
       - docker-in-docker
@@ -173,13 +67,6 @@ verify setup.py:
         - docker:dind
     environment:
         name: unsafe
-
-{% for OS in testos %}
-pip {{loop.index}}/{{loop.length}}:
-    extends: .docker-in-docker
-    stage: install_checks
-    script: docker build -f .ci/docker/install_checks/{{OS}}/Dockerfile .
-{% endfor %}
 
 # this should ensure binderhubs can still build a runnable image from our repo
 .binder:
@@ -205,21 +92,6 @@ local_jupyter:
         - cd .binder
         - docker-compose run jupyter ${CMD}
 
-{% for url in binder_urls %}
-trigger_binder {{loop.index}}/{{loop.length}}:
-    extends: .test_base
-    stage: deploy
-    image: alpine:3.10
-    only:
-        - master
-        - tags
-    before_script:
-        - apk --update add bash python3
-        - pip3 install requests
-    script:
-        - python3 .ci/gitlab/trigger_binder.py "{{url}}/${CI_COMMIT_REF}"
-{% endfor %}
-
 .wheel:
     extends: .docker-in-docker
     stage: build
@@ -231,43 +103,6 @@ trigger_binder {{loop.index}}/{{loop.length}}:
         # cannot use exported var from env here
         - ${CI_PROJECT_DIR}/shared/pymor*manylinux*whl
         expire_in: 1 week
-
-{%- for PY in pythons %}
-{%- for ML in [1, 2010, 2014] %}
-wheel {{ML}} py{{PY[0]}} {{PY[2]}}:
-    extends: .wheel
-    variables:
-        PYVER: "{{PY}}"
-    script: bash .ci/gitlab/wheels.bash {{ML}}
-{% endfor %}
-{% endfor %}
-
-.check_wheel:
-    extends: .test_base
-    stage: install_checks
-    services:
-      - pymor/devpi:1
-    dependencies:
-    {%- for PY in pythons %}
-    {%- for ML in [1, 2010, 2014] %}
-      - "wheel {{ML}} py{{PY[0]}} {{PY[2]}}"
-    {%- endfor %}
-    {%- endfor %}
-    before_script:
-      - pip3 install devpi-client
-      - devpi use http://pymor__devpi:3141/root/public --set-cfg
-      - devpi login root --password none
-      - devpi upload --from-dir --formats=* ./shared
-    only: ['branches', 'tags', 'triggers']
-    # the docker service adressing fails on other runners
-    tags: [mike]
-
-{% for OS in testos %}
-check_wheel {{loop.index}}:
-    extends: .check_wheel
-    image: pymor/deploy_checks:devpi_{{OS}}
-    script: devpi install pymor[full]
-{% endfor %}
 
 sanity:
     extends: .docker-in-docker

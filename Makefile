@@ -55,6 +55,7 @@ docs:
 
 # Docker targets
 docker_image:
+	echo PYPI_MIRROR_TAG=$(PYPI_MIRROR_TAG) CI_IMAGE_TAG=$(CI_IMAGE_TAG) $(DOCKER_COMPOSE) build
 	PYPI_MIRROR_TAG=$(PYPI_MIRROR_TAG) CI_IMAGE_TAG=$(CI_IMAGE_TAG) $(DOCKER_COMPOSE) build
 
 docker_docs: docker_image
