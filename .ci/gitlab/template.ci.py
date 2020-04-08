@@ -13,6 +13,8 @@ stages:
 #************ definition of base jobs *********************************************************************************#
 
 .test_base:
+    tags:
+      - amm-only
     retry:
         max: 2
         when:
@@ -28,6 +30,7 @@ stages:
 .pytest:
     extends: .test_base
     tags:
+      - amm-only
       - long execution time
     environment:
         name: unsafe
@@ -121,7 +124,6 @@ stages:
       - devpi upload --from-dir --formats=* ./shared
     only: ['branches', 'tags', 'triggers']
     # the docker service adressing fails on other runners
-    tags: [mike]
 
 #******** end definition of base jobs *********************************************************************************#
 
