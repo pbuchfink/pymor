@@ -19,7 +19,6 @@ stages:
             - runner_system_failure
             - stuck_or_timeout_failure
             - api_failure
-    only: ['branches', 'tags', 'triggers', 'merge-requests']
     except:
         - /^staging/.*$/i
     variables:
@@ -86,6 +85,8 @@ stages:
 .binder:
     extends: .docker-in-docker
     stage: install_checks
+    except:
+        - schedules
     variables:
         IMAGE: ${CI_REGISTRY_IMAGE}/binder:${CI_COMMIT_REF_SLUG}
         CMD: "jupyter nbconvert --to notebook --execute /pymor/.ci/ci_dummy.ipynb"
@@ -94,6 +95,8 @@ stages:
 .wheel:
     extends: .docker-in-docker
     stage: build
+    except:
+        - schedules
     only: ['branches', 'tags', 'triggers']
     variables:
         TEST_OS: "{{ ' '.join(testos) }}"
@@ -107,6 +110,8 @@ stages:
 .check_wheel:
     extends: .test_base
     stage: install_checks
+    except:
+        - schedules
     services:
       - pymor/devpi:1
     dependencies:
@@ -146,6 +151,8 @@ ci setup:
 
 minimal_cpp_demo:
     extends: .pytest
+    except:
+        - schedules
     services:
         - name: pymor/pypi-mirror_stable_py3.7:{{pypi_mirror_tag}}
           alias: pypi_mirror
@@ -156,6 +163,8 @@ minimal_cpp_demo:
 {%- for script, py, para in matrix %}
 {{script}} {{py[0]}} {{py[2]}}:
     extends: .pytest
+    except:
+        - schedules
     services:
     {%- if script == "oldest" %}
         - name: pymor/pypi-mirror_oldest_py{{py}}:{{pypi_mirror_tag}}
@@ -167,9 +176,24 @@ minimal_cpp_demo:
     script: ./.ci/gitlab/test_{{script}}.bash
 {%- endfor %}
 
+{%- for py in pythons %}
+ci_weekly {{py[0]}} {{py[2]}}:
+    extends: .pytest
+    only:
+        - schedules
+    services:
+        - name: pymor/pypi-mirror_stable_py{{py}}:{{pypi_mirror_tag}}
+          alias: pypi_mirror
+    image: pymor/testing_py{{py}}:{{ci_image_tag}}
+    {# PYMOR_HYPOTHESIS_PROFILE is overwritten from web schedule settings #}
+    script: ./.ci/gitlab/test_vanilla.bash
+{%- endfor %}
+
 {%- for script, py, para in matrix if script in ['vanilla', 'oldest', 'numpy_git'] %}
 submit {{script}} {{py[0]}} {{py[2]}}:
     extends: .submit
+    except:
+        - schedules
     image: pymor/python:{{py}}
     variables:
         COVERAGE_FLAG: {{script}}
@@ -177,9 +201,24 @@ submit {{script}} {{py[0]}} {{py[2]}}:
         - {{script}} {{py[0]}} {{py[2]}}
 {%- endfor %}
 
+{%- for py in pythons %}
+submit ci_weekly {{py[0]}} {{py[2]}}:
+    extends: .submit
+    only:
+        - schedules
+    image: pymor/python:{{py}}
+    variables:
+        COVERAGE_FLAG: ci_weekly
+    dependencies:
+        - ci_weekly {{py[0]}} {{py[2]}}
+{%- endfor %}
+
+
 {% for OS in testos %}
 pip {{loop.index}}/{{loop.length}}:
     extends: .docker-in-docker
+    except:
+        - schedules
     stage: install_checks
     script: docker build -f .ci/docker/install_checks/{{OS}}/Dockerfile .
 {% endfor %}
@@ -232,6 +271,8 @@ check_wheel {{loop.index}}:
 
 pages build:
     extends: .docker-in-docker
+    except:
+        - schedules
     stage: build
     script:
         - apk --update add make python3
@@ -245,6 +286,8 @@ pages build:
 pages:
     extends: .docker-in-docker
     stage: deploy
+    except:
+        - schedules
     resource_group: pages_deploy
     dependencies:
         - pages build
