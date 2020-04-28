@@ -3,8 +3,13 @@
 # License: BSD 2-Clause License (http://opensource.org/licenses/BSD-2-Clause)
 
 import os
+
+from hypothesis import given, settings
+from hypothesis.strategies import sampled_from
+
 import pymordemos
 import runpy
+import numpy as np
 import sys
 import pytest
 from tempfile import mkdtemp
@@ -15,7 +20,7 @@ from pymor.core.exceptions import QtMissing, GmshMissing, MeshioMissing
 from pymor.discretizers.builtin.gui.qt import stop_gui_processes
 from pymor.core.config import is_windows_platform, is_macos_platform
 from pymor.tools.mpi import parallel
-
+from pymortests.conftest import DEFAULT_CI_MAX_EXAMPLES
 
 DISCRETIZATION_ARGS = (
     ('elliptic', [0, 0, 0, 0]),
@@ -237,16 +242,21 @@ def test_analyze_pickle4():
         shutil.rmtree(d)
 
 
+def _max_ipy_examples():
+    val = max(1, int(len(THERMALBLOCK_ARGS) * np.clip((settings().max_examples / DEFAULT_CI_MAX_EXAMPLES), 0.1, 1)))
+    return val
+
+
 @pytest.mark.skipif(is_windows_platform(), reason='hangs indefinitely')
 @pytest.mark.skipif(is_macos_platform(), reason='spurious JSON Decode errors in Ipython launch')
-def test_thermalblock_ipython(demo_args):
-    if demo_args[0] != 'pymordemos.thermalblock':
-        return
+@given(tb_args=sampled_from(THERMALBLOCK_ARGS))
+@settings(max_examples=_max_ipy_examples())
+def test_thermalblock_ipython(tb_args):
     from pymor.tools import mpi
     if mpi.parallel:  # simply running 'ipcluster start' (without any profile) does not seem to work
         return        # when running under mpirun, so we do not test this combination for now
     try:
-        test_demos((demo_args[0], ['--ipython-engines=2'] + demo_args[1]))
+        test_demos((f'pymordemos.{tb_args[0]}', ['--ipython-engines=2'] + tb_args[1]))
     finally:
         import time     # there seems to be no way to shutdown the IPyhton cluster s.t. a new
         time.sleep(10)  # cluster can be started directly afterwards, so we have to wait ...
