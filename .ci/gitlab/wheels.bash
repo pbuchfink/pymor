@@ -21,5 +21,4 @@ mkdir -p ${BUILDER_WHEELHOUSE}
 BUILDER_IMAGE=pymor/wheelbuilder_${MANYLINUX}_py${PYVER}:${PYPI_MIRROR_TAG}
 docker pull ${BUILDER_IMAGE}
 docker run --rm  -t -e LOCAL_USER_ID=$(id -u)  \
-    -v ${BUILDER_WHEELHOUSE}:/io/wheelhouse \
-    -v ${PYMOR_ROOT}:/io/pymor ${BUILDER_IMAGE} ls
+     ${BUILDER_IMAGE} ls
