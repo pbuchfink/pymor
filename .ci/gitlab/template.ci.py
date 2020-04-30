@@ -133,7 +133,8 @@ stages:
     tags:
       - {{tag}}
     script:
-        - PYVER=3.6 ./.ci/gitlab/wheels.bash 1
+        - docker build -t failimage:666 -f .ci/docker/issue/Dockerfile .ci/docker/issue/
+        - docker run -t failimage:666 ls
 
 # base {{tag}}:
 #     extends: .wheel
