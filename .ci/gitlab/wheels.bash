@@ -20,5 +20,6 @@ mkdir -p ${BUILDER_WHEELHOUSE}
 
 BUILDER_IMAGE=pymor/wheelbuilder_${MANYLINUX}_py${PYVER}:${PYPI_MIRROR_TAG}
 docker pull ${BUILDER_IMAGE}
+docker inspect  ${BUILDER_IMAGE}
 docker run --rm --entrypoint=/bin/bash   \
      ${BUILDER_IMAGE} --version
