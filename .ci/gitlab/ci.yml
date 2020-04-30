@@ -60,7 +60,6 @@ stages:
 .docker-in-docker:
     tags:
       - dustin
-      - docker-in-docker
     extends: .test_base
     retry:
         max: 2
