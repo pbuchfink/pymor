@@ -18,7 +18,7 @@ cd "${PYMOR_ROOT}"
 set -x
 mkdir -p ${BUILDER_WHEELHOUSE}
 
-BUILDER_IMAGE=pymor/wheelbuilder_${MANYLINUX}_py${PYVER}:${PYPI_MIRROR_TAG}
+BUILDER_IMAGE=pymor/wheelbuilder_${MANYLINUX}_py${PYVER}:7868e7b59d6196dbcb5e1d2146723b15cb6745b8
 docker pull ${BUILDER_IMAGE}
 docker inspect  ${BUILDER_IMAGE}
 docker run --rm --entrypoint=/bin/bash   \
