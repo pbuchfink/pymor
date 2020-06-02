@@ -71,15 +71,7 @@ if os.environ.get('READTHEDOCS', None) != 'True':
 
 sys.path.insert(0, os.path.abspath('.'))
 
-#generate autodoc
-import gen_apidoc
 import pymor
-#import pymortests
-import pymordemos
-gen_apidoc.walk(pymor)
-# gen_apidoc.walk(pymortests)
-gen_apidoc.walk(pymordemos)
-
 
 extensions = ['sphinx.ext.autodoc',
               'sphinx.ext.coverage',
@@ -90,6 +82,7 @@ extensions = ['sphinx.ext.autodoc',
               'nb2plots',
               'sphinx.ext.mathjax',
               'sphinx_qt_documentation',
+              'autoapi.extension',
               ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -259,6 +252,14 @@ phantom_import_file = 'dump.xml'
 
 import glob
 autosummary_generate = glob.glob("generated/*.rst")
+
+# https://sphinx-autoapi.readthedocs.io/en/latest/reference/config.html
+# directories for autoapi to index
+autoapi_dirs = [os.path.join(CONF_DIR, '../../src/pymor'),
+                os.path.join(CONF_DIR, '../../src/pymordemos')]
+autoapi_root = os.path.join(CONF_DIR, 'generated')
+autoapi_python_use_implicit_namespaces = True
+autoapi_keep_files = True
 
 # -----------------------------------------------------------------------------
 # Coverage checker
