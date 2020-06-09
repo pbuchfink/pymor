@@ -88,113 +88,72 @@ def np_arrays(length, dim, dtype=None):
     raise RuntimeError(f'unsupported dtype={dtype}')
 
 
-@hyst.composite
-def numpy_vector_array(draw, count=1, dtype=None, length=None, compatible=True):
-    dim = draw(hy_dims(count, compatible))
-    dtype = dtype or draw(hy_dtypes)
-    lngs = length or hyst.tuples(*[hy_lengths for _ in range(count)])
-    data = hyst.tuples(*[np_arrays(l, d, dtype=dtype) for d, l in zip(dim, draw(lngs))])
-    vec = [NumpyVectorSpace.from_numpy(d) for d in draw(data)]
-    return [_vector_array_from_empty_reserve(v, draw(hy_reserves)) for v in vec]
+def numpy_vector_spaces(draw, np_data_list, compatible, count, dims):
+    return [(NumpyVectorSpace(d), ar) for d, ar in zip(dims, np_data_list)]
 
 
-@hyst.composite
-def numpy_list_vector_array(draw, count=1, dtype=None, length=None, compatible=True):
-    dim = draw(hy_dims(count, compatible))
-    dtype = dtype or draw(hy_dtypes)
-    lngs = length or hyst.tuples(*[hy_lengths for _ in range(count)])
-    data = hyst.tuples(*[np_arrays(l, d, dtype=dtype) for d, l in zip(dim, draw(lngs))])
-    vec = [NumpyListVectorSpace.from_numpy(d) for d in draw(data)]
-    return [_vector_array_from_empty_reserve(v, draw(hy_reserves)) for v in vec]
+def numpy_list_vector_spaces(draw, np_data_list, compatible, count, dims):
+    return [(NumpyListVectorSpace(d), ar) for d, ar in zip(dims, np_data_list)]
 
 
-@hyst.composite
-def block_vector_array(draw, count=1, dtype=None, length=None, compatible=True):
+def block_vector_spaces(draw, np_data_list, compatible, count, dims):
     if not compatible:
         assert count == 2
-        dim_tuples = draw(hy_block_space_dims_incompat)
+        block_dims_tuples = draw(hy_block_space_dims_incompat)
     else:
-        dim_tuples = draw(equal_tuples(hy_block_space_dims, count=count))
-    lngs = length or hyst.tuples(*[hy_lengths for _ in range(count)])
+        block_dims_tuples = draw(equal_tuples(hy_block_space_dims, count=count))
     ret = []
-    dtype = dtype or draw(hy_dtypes)
-    for dims, l in zip(dim_tuples, draw(lngs)):
-        data = draw(np_arrays(l, sum(dims), dtype=dtype))
-        V = BlockVectorSpace([NumpyVectorSpace(dim) for dim in dims]).from_numpy(
-            NumpyVectorSpace.from_numpy(data).to_numpy()
-        )
-        ret.append(V)
+    for d, ar in zip(dims, np_data_list):
+        # TODO actually compute different blockdims as above
+        block_dims = [d]
+        constituent_spaces = [NumpyVectorSpace(dim) for dim in block_dims]
+        ret.append(BlockVectorSpace(constituent_spaces))
     return ret
 
+_other_vector_space_types = []
 
 if config.HAVE_FENICS:
-    @hyst.composite
-    def fenics_spaces(draw, element_count=hyst.integers(min_value=1, max_value=101)):
-        ni = draw(element_count)
-        return df.FunctionSpace(df.UnitSquareMesh(ni, ni), 'Lagrange', 1)
-
-    @hyst.composite
-    def fenics_vector_array(draw, count=1, dtype=None, length=None, compatible=True):
-        assume(compatible)
-        if dtype: # complex is not actually supported
-            assert dtype == np.float64
-        dtype = np.float64
-        lngs = draw(length or hyst.tuples(*[hy_lengths for _ in range(count)]))
-        V = draw(fenics_spaces())
-        Us = [FenicsVectorSpace(V).zeros(l) for l in lngs]
-        dims = [U.dim for U in Us]
-        for i in range(count):
-            # dtype is float here since the petsc vector is not setup for complex
-            for v, a in zip(Us[i]._list, draw(np_arrays(lngs[i], dims[i], dtype=dtype))):
-                v = FenicsVectorSpace(V).vector_from_numpy(a)
-        return Us
-else:
-    fenics_vector_array = nothing
+    def fenics_vector_spaces(draw, np_data_list, compatible, count, dims):
+        ret = []
+        for d, ar in zip(dims, np_data_list):
+            if d < 2:
+                continue
+            ret.append((FenicsVectorSpace(df.FunctionSpace(df.UnitIntervalMesh(d-1), 'Lagrange', 1)), ar) )
+        return ret
+    _other_vector_space_types.append('fenics')
 
 if config.HAVE_NGSOLVE:
-    @hyst.composite
-    def ngsolve_vector_array(draw, count=1, dtype=None, length=None, compatible=True):
-        if dtype: # complex is not actually supported
-            assert dtype == np.float64
-        dtype = np.float64
-        dim = draw(hy_dims(count, compatible))
-        lngs = draw(length or hyst.tuples(*[hy_lengths for _ in range(count)]))
-        spaces = [create_ngsolve_space(d) for d in dim]
-        Us = [s.zeros(l) for s,l in zip(spaces, lngs)]
-        for i in range(count):
-            for v, a in zip(Us[i]._list, draw(np_arrays(lngs[i], dim[i], dtype=dtype))):
-                v.to_numpy()[:] = a
-        return Us
-else:
-    ngsolve_vector_array = nothing
+    def ngsolve_vector_spaces(draw, np_data_list, compatible, count, dims):
+        # assert np_data_list[0].dtype == np.float64
+        return [(create_ngsolve_space(d), ar) for d, ar in zip(dims, np_data_list)]
+    _other_vector_space_types.append('ngsolve')
 
 if config.HAVE_DEALII:
-    @hyst.composite
-    def dealii_vector_array(draw, count=1, dtype=None, length=None, compatible=True):
-        dim = draw(hy_dims(count, compatible))
-        dtype = dtype or draw(hy_dtypes)
-        lngs = draw(length or hyst.tuples(*[hy_lengths for _ in range(count)]))
-        Us = [DealIIVectorSpace(d).zeros(l) for d, l in zip(dim, lngs)]
-        for i in range(count):
-            for v, a in zip(Us[i]._list, draw(np_arrays(lngs[i], dim[i], dtype=dtype))):
-                v.impl[:] = a
-        return Us
-else:
-    dealii_vector_array = nothing
+    def dealii_vector_spaces(draw, np_data_list, compatible, count, dims):
+        return [(DealIIVectorSpace(d), ar) for d, ar in zip(dims, np_data_list)]
+    _other_vector_space_types.append('dealii')
+
+_picklable_vector_space_types = ['numpy', 'numpy_list', 'block']
+_picklable_vector_space_types = ['numpy', 'numpy_list']
 
 
-def picklable_vector_arrays(count=1, dtype=None, length=None, compatible=True):
-    return numpy_vector_array(count, dtype, length, compatible) | \
-           numpy_list_vector_array(count, dtype, length, compatible) | \
-           block_vector_array(count, dtype, length, compatible)
+@hyst.composite
+def vector_arrays(draw, count=1, dtype=None, length=None, compatible=True, picklable_only=False):
+    dims = draw(hy_dims(count, compatible))
+    dtype = dtype or draw(hy_dtypes)
+    lngs = draw(length or hyst.tuples(*[hy_lengths for _ in range(count)]))
+    np_data_list = [draw(np_arrays(l, dim, dtype=dtype)) for l, dim in zip(lngs, dims)]
+    space_types = _picklable_vector_space_types
+    if not picklable_only:
+        space_types.extend(_other_vector_space_types)
+    ret = []
+    for space_type in space_types:
+        space_data = globals()[f'{space_type}_vector_spaces'](draw, np_data_list, compatible, count, dims)
+        vecs = [sp.from_numpy(d) for sp, d in space_data]
+        if len(vecs):
+            ret.append(vecs)
+    return ret
 
-
-# strategies shrink to the left while falsifying, make the "simplest" the leftmost
-def vector_arrays(count=1, dtype=None, length=None, compatible=True):
-    return picklable_vector_arrays(count, dtype, length, compatible) | \
-           fenics_vector_array(count, dtype, length, compatible) | \
-           dealii_vector_array(count, dtype, length, compatible) | \
-           ngsolve_vector_array(count, dtype, length, compatible)
 
 
 # TODO this needs to be a strategy

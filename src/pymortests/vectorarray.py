@@ -52,17 +52,19 @@ def ind_to_list(v, ind):
 
 @given(pyst.vector_arrays(count=1))
 def test_empty(vector_arrays):
-    vector_array = vector_arrays[0]
-    with pytest.raises(Exception):
-        vector_array.empty(-1)
-    for r in (0, 1, 100):
-        v = vector_arrays[0].empty(reserve=r)
-        assert v.space == vector_array.space
-        assert len(v) == 0
-        try:
-            assert v.to_numpy().shape == (0, v.dim)
-        except NotImplementedError:
-            pass
+    for v in vector_arrays:
+        vector_array = v[0]
+        with pytest.raises(Exception):
+            vector_array.empty(-1)
+        for r in (0, 1, 100):
+            v = vector_array.empty(reserve=r)
+            assert v.space == vector_array.space
+            assert len(v) == 0
+            try:
+                assert v.to_numpy().shape == (0, v.dim)
+            except NotImplementedError:
+                pass
+
 
 
 @given(pyst.vector_arrays(count=1))
